@@ -1,0 +1,10 @@
+node_modules/
+release/
+*.log
+test/shot-*.png
+test/fresh-profile/
+test/portable-profile/
+release-*/
+test/*-profile/
+*.tmp
+.DS_Store

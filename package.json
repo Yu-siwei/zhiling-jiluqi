@@ -1,0 +1,72 @@
+{
+  "name": "command-recorder",
+  "productName": "指令记录器",
+  "version": "1.2.0",
+  "private": true,
+  "description": "深色命令记录器：英文指令自动翻译、按软件环境分类、收藏与排序，左键点击即可复制。",
+  "author": "指令记录器",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.commandrecorder.app",
+    "productName": "指令记录器",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "index.html",
+      "styles.css",
+      "app.js",
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "build/icon.png"
+    ],
+    "asar": true,
+    "compression": "normal",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "指令记录器",
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "指令记录器-安装包-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "指令记录器-便携版-${version}.${ext}"
+    }
+  }
+}
