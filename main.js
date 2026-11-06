@@ -1,10 +1,9 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, net, shell } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const store = require('./lib/store');
-const { translateCommand } = require('./lib/translate');
 
 app.setName('指令记录器');
 
@@ -106,20 +105,6 @@ function registerIpc() {
       return { ok: true };
     } catch (error) {
       return { ok: false, error: '复制失败：' + asErrorMessage(error) };
-    }
-  });
-
-  ipcMain.handle('translate:text', async (_event, text) => {
-    try {
-      if (typeof text !== 'string') {
-        return { ok: false, error: '指令内容无效' };
-      }
-      const result = await translateCommand(text, {
-        fetchImpl: (url, options) => net.fetch(url, options)
-      });
-      return { ok: true, translation: result.translation, source: result.source };
-    } catch (error) {
-      return { ok: false, error: asErrorMessage(error) };
     }
   });
 

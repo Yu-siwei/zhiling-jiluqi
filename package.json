@@ -1,9 +1,9 @@
 {
   "name": "command-recorder",
   "productName": "指令记录器",
-  "version": "1.2.0",
+  "version": "1.3.1",
   "private": true,
-  "description": "深色命令记录器：英文指令自动翻译、按软件环境分类、收藏与排序，左键点击即可复制。",
+  "description": "深色命令记录器：记录指令与用途说明、按软件环境分类、收藏与排序，左键点击即可复制。",
   "author": "指令记录器",
   "license": "MIT",
   "main": "main.js",

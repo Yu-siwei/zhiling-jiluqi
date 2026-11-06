@@ -486,7 +486,6 @@
       commands = commands.filter((command) => {
         const haystack = [
           command.text,
-          command.translation,
           command.purpose,
           command.environment
         ].join('\n').toLocaleLowerCase();
@@ -533,7 +532,7 @@
     if (appState.commands.length === 0) {
       els.commandList.innerHTML = emptyStateTemplate({
         title: '记录第一条指令',
-        text: '把常用命令、中文翻译、用途和软件环境记下来。点击卡片即可复制，直接粘贴到终端。',
+        text: '把常用命令、用途和软件环境记下来。点击卡片即可复制，直接粘贴到终端。',
         action: 'new',
         actionLabel: '新建指令'
       });
@@ -576,12 +575,9 @@
     const environment = command.environment || '未分类';
     const hasEnvironment = Boolean(command.environment);
     const manual = ui.sort === 'manual';
-    const translation = command.translation
-      ? '<p class="translation-text" aria-label="中文翻译">' + escapeHtml(command.translation) + '</p>'
-      : '<p class="translation-text is-empty" aria-label="中文翻译">暂无译文</p>';
     const purpose = command.purpose
-      ? '<span class="purpose-text" title="' + escapeHtml(command.purpose) + '">' + escapeHtml(command.purpose) + '</span>'
-      : '';
+      ? '<p class="purpose-text" title="' + escapeHtml(command.purpose) + '">' + escapeHtml(command.purpose) + '</p>'
+      : '<p class="purpose-text is-empty">未填写用途说明</p>';
     const dotStyle = hasEnvironment ? ' style="--env-color:' + envColor(command.environment) + '"' : '';
     const dotClass = hasEnvironment ? 'environment-dot' : 'environment-dot is-neutral';
     const dragHandle = manual
@@ -598,7 +594,6 @@
       '<span class="' + dotClass + '"' + dotStyle + '></span>' +
       '<span>' + escapeHtml(environment) + '</span>' +
       '</span>' +
-      purpose +
       '<div class="card-actions">' +
       '<button class="icon-action favorite-action' + (command.favorite ? ' is-favorite' : '') + '" type="button" ' +
       'data-action="favorite" data-id="' + escapeHtml(command.id) + '" ' +
@@ -608,9 +603,11 @@
       '<button class="icon-action delete-action" type="button" data-action="delete" data-id="' + escapeHtml(command.id) + '" title="删除指令" aria-label="删除指令">' + ICON.trash + '</button>' +
       '</div>' +
       '</div>' +
-      '<div class="code-row">' +
+      '<div class="card-body">' +
       '<pre class="command-text" aria-label="指令">' + escapeHtml(command.text) + '</pre>' +
-      translation +
+      '<div class="purpose-cell">' +
+      purpose +
+      '</div>' +
       '</div>' +
       '</article>'
     );
@@ -997,7 +994,7 @@
   }
 
   function commandFingerprint(command) {
-    return [command.text, command.translation, command.purpose, command.environment]
+    return [command.text, command.purpose, command.environment]
       .map((value) => String(value || '').trim())
       .join('\u0000');
   }
@@ -1180,38 +1177,26 @@
     if (id && !existing) return;
 
     const isEdit = Boolean(existing);
-    const initialTranslation = existing ? existing.translation : '';
     const environments = normalizeEnvironmentOrderFor(appState.commands, appState.environmentOrder);
 
     els.modalHost.innerHTML = editorTemplate(existing, environments, isEdit);
     const backdrop = els.modalHost.querySelector('.editor-backdrop');
     const form = els.modalHost.querySelector('#editorForm');
     const commandInput = els.modalHost.querySelector('#commandInput');
-    const translationInput = els.modalHost.querySelector('#translationInput');
     const purposeInput = els.modalHost.querySelector('#purposeInput');
     const environmentInput = els.modalHost.querySelector('#environmentInput');
     const favoriteInput = els.modalHost.querySelector('#favoriteInput');
-    const translationField = els.modalHost.querySelector('#translationField');
-    const translationStatus = els.modalHost.querySelector('#translationStatus');
-    const retranslateButton = els.modalHost.querySelector('#retranslateButton');
-    const languageHint = els.modalHost.querySelector('#languageHint');
     const editorError = els.modalHost.querySelector('#editorError');
     const saveButton = els.modalHost.querySelector('#saveButton');
     const cancelButton = els.modalHost.querySelector('#cancelButton');
     const closeButton = els.modalHost.querySelector('#editorClose');
 
-    let translationTouched = Boolean(initialTranslation.trim());
-    let lastAutoTranslation = null;
-    let autoTimer = null;
-    let translateSeq = 0;
     let saving = false;
     let closed = false;
-    let suppressTranslationInput = false;
 
     const context = {
       form,
       commandInput,
-      translationInput,
       purposeInput,
       environmentInput,
       favoriteInput,
@@ -1222,19 +1207,6 @@
     modal = context;
 
     document.body.classList.add('modal-open');
-    updateLanguageHint();
-    retranslateButton.disabled = !isEnglishText(commandInput.value);
-
-    if (initialTranslation.trim()) {
-      setTranslationStatus('manual', '已保存');
-    } else if (isEnglishText(commandInput.value)) {
-      setTranslationStatus('idle', '准备翻译…');
-      autoTimer = setTimeout(() => requestTranslation(false), 350);
-    } else if (commandInput.value.trim()) {
-      setTranslationStatus('idle', '无需翻译');
-    } else {
-      setTranslationStatus('idle', '等待输入');
-    }
 
     requestAnimationFrame(() => {
       if (closed) return;
@@ -1242,70 +1214,10 @@
       commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
     });
 
-    commandInput.addEventListener('input', () => {
-      hideEditorError();
-      clearTimeout(autoTimer);
-      autoTimer = null;
-      translateSeq += 1;
-
-      // An untouched translation belongs to the previous command text. Clear it
-      // immediately so a quick save can never persist a stale translation.
-      if (!translationTouched && translationInput.value) {
-        suppressTranslationInput = true;
-        translationInput.value = '';
-        suppressTranslationInput = false;
-        lastAutoTranslation = null;
-        translationField.classList.remove('translation-manual');
-      }
-
-      updateLanguageHint();
-
-      const text = commandInput.value.trim();
-      const english = isEnglishText(text);
-      retranslateButton.disabled = !english;
-
-      if (!english) {
-        if (!translationInput.value.trim()) setTranslationStatus('idle', text ? '无需翻译' : '等待输入');
-        else setTranslationStatus('manual', '已有译文');
-        return;
-      }
-
-      if (translationTouched) {
-        setTranslationStatus('manual', translationInput.value.trim() ? '保留原译文' : '可自动翻译');
-        return;
-      }
-
-      if (translationInput.value.trim() && translationInput.value.trim() !== lastAutoTranslation) {
-        translationTouched = true;
-        setTranslationStatus('manual', '已有译文');
-        return;
-      }
-
-      setTranslationStatus('idle', '准备翻译…');
-      autoTimer = setTimeout(() => requestTranslation(false), 750);
-    });
-
-    translationInput.addEventListener('input', () => {
-      if (suppressTranslationInput) return;
-      hideEditorError();
-      translationTouched = true;
-      lastAutoTranslation = null;
-      clearTimeout(autoTimer);
-      autoTimer = null;
-      translateSeq += 1;
-      retranslateButton.disabled = !isEnglishText(commandInput.value);
-      translationField.classList.add('translation-manual');
-      setTranslationStatus('manual', translationInput.value.trim() ? '手动填写' : '未填写');
-    });
-
+    commandInput.addEventListener('input', hideEditorError);
     purposeInput.addEventListener('input', hideEditorError);
     environmentInput.addEventListener('input', hideEditorError);
     favoriteInput.addEventListener('change', hideEditorError);
-
-    retranslateButton.addEventListener('click', () => {
-      hideEditorError();
-      requestTranslation(true);
-    });
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -1317,69 +1229,6 @@
     backdrop.addEventListener('mousedown', (event) => {
       if (event.target === backdrop) event.preventDefault();
     });
-
-    function updateLanguageHint() {
-      const text = commandInput.value.trim();
-      const english = isEnglishText(text);
-      if (!text) {
-        languageHint.textContent = '输入英文指令后自动翻译';
-        languageHint.classList.remove('is-english');
-      } else if (english) {
-        languageHint.textContent = '检测到英文 · 将自动翻译';
-        languageHint.classList.add('is-english');
-      } else {
-        languageHint.textContent = '内容不是英文，无需自动翻译';
-        languageHint.classList.remove('is-english');
-      }
-    }
-
-    function setTranslationStatus(kind, label) {
-      if (kind === 'loading') {
-        translationStatus.innerHTML = '<span class="spinner is-small" aria-hidden="true"></span><span>' + escapeHtml(label) + '</span>';
-      } else {
-        translationStatus.innerHTML = '<span class="status-dot" aria-hidden="true"></span><span>' + escapeHtml(label) + '</span>';
-      }
-      translationStatus.dataset.kind = kind;
-    }
-
-    async function requestTranslation(force) {
-      const text = commandInput.value.trim();
-      if (!text || !isEnglishText(text) || closed) return null;
-      if (!force && translationTouched) return null;
-
-      clearTimeout(autoTimer);
-      autoTimer = null;
-      const seq = ++translateSeq;
-      retranslateButton.disabled = true;
-      setTranslationStatus('loading', force ? '重新翻译…' : '正在翻译…');
-
-      try {
-        const result = await api.translate(text);
-        if (closed || seq !== translateSeq) return null;
-        if (!result || !result.ok) throw new Error((result && result.error) || '自动翻译失败');
-
-        suppressTranslationInput = true;
-        translationInput.value = result.translation;
-        suppressTranslationInput = false;
-        translationTouched = false;
-        lastAutoTranslation = result.translation;
-        translationField.classList.remove('translation-manual');
-        hideEditorError();
-        setTranslationStatus(
-          result.source === 'local' ? 'local' : 'auto',
-          result.source === 'local' ? '本地释义' : '已自动翻译'
-        );
-        return result.translation;
-      } catch (error) {
-        if (closed || seq !== translateSeq) return null;
-        setTranslationStatus('error', error && error.message ? error.message : '自动翻译失败');
-        return null;
-      } finally {
-        if (!closed && seq === translateSeq) {
-          retranslateButton.disabled = !isEnglishText(commandInput.value);
-        }
-      }
-    }
 
     function showEditorError(message) {
       editorError.textContent = message;
@@ -1407,20 +1256,10 @@
       cancelButton.disabled = true;
       saveButton.textContent = '保存中…';
 
-      const alreadyFailed = translationStatus.dataset.kind === 'error';
-      let translationFailed = alreadyFailed && !translationInput.value.trim();
-      if (!translationInput.value.trim() && !translationTouched && isEnglishText(text) && !alreadyFailed) {
-        const translated = await requestTranslation(true);
-        if (!translated) translationFailed = true;
-      }
-
-      if (closed) return;
-
       const now = Date.now();
       const payload = {
         id: existing ? existing.id : makeId(),
         text,
-        translation: translationInput.value.trim(),
         purpose: purposeInput.value.trim(),
         environment: environmentInput.value.trim(),
         favorite: favoriteInput.checked,
@@ -1443,11 +1282,7 @@
         appState = normalizeRendererState(result.state);
         closeEditor();
         renderAll();
-        if (translationFailed) {
-          showToast('已保存，自动翻译失败，可编辑补充译文', { tone: 'warn', duration: 5500 });
-        } else {
-          showToast(existing ? '修改已保存' : '指令已添加');
-        }
+        showToast(existing ? '修改已保存' : '指令已添加');
       } catch (error) {
         saving = false;
         saveButton.disabled = false;
@@ -1461,9 +1296,6 @@
       if (closed) return;
       closed = true;
       context.closed = true;
-      clearTimeout(autoTimer);
-      autoTimer = null;
-      translateSeq += 1;
       modal = null;
       els.modalHost.innerHTML = '';
       document.body.classList.remove('modal-open');
@@ -1499,7 +1331,6 @@
 
   function editorTemplate(existing, environments, isEdit) {
     const text = existing ? existing.text : '';
-    const translation = existing ? existing.translation : '';
     const purpose = existing ? existing.purpose : '';
     const environment = existing ? existing.environment : '';
     const favorite = existing ? existing.favorite : false;
@@ -1511,7 +1342,7 @@
       '<div class="editor-title-wrap">' +
       '<p class="editor-kicker">' + (isEdit ? 'EDIT COMMAND' : 'NEW COMMAND') + '</p>' +
       '<h2 class="editor-title" id="editorTitle">' + (isEdit ? '编辑指令' : '新建指令') + '</h2>' +
-      '<p class="editor-subtitle">英文指令会通过在线服务自动翻译，译文也可以手动修改。</p>' +
+      '<p class="editor-subtitle">记录指令本身、它解决什么问题，以及常用的软件环境。</p>' +
       '</div>' +
       '<button class="editor-close" id="editorClose" type="button" title="关闭" aria-label="关闭">' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>' +
@@ -1522,24 +1353,10 @@
       '<div class="form-field">' +
       '<div class="field-label-row">' +
       '<label class="field-label" for="commandInput">指令内容</label>' +
-      '<span class="field-hint" id="languageHint">输入英文指令后自动翻译</span>' +
+      '<span class="field-hint">粘贴或输入完整指令</span>' +
       '</div>' +
       '<textarea class="field-input command-input" id="commandInput" maxlength="20000" spellcheck="false" ' +
       'placeholder="例如：git log --oneline -n 10">' + escapeHtml(text) + '</textarea>' +
-      '</div>' +
-      '<div class="form-field" id="translationField">' +
-      '<div class="field-label-row">' +
-      '<label class="field-label" for="translationInput">中文翻译 <span class="optional">可编辑</span></label>' +
-      '<div class="field-status-row">' +
-      '<span class="translation-status" id="translationStatus" data-kind="idle"></span>' +
-      '<button class="mini-action" id="retranslateButton" type="button" title="重新自动翻译">' +
-      ICON.refresh + '<span>重译</span>' +
-      '</button>' +
-      '</div>' +
-      '</div>' +
-      '<textarea class="field-input translation-input" id="translationInput" maxlength="20000" ' +
-      'placeholder="自动翻译结果会显示在这里，也可以手动填写">' + escapeHtml(translation) + '</textarea>' +
-      '</div>' +
       '</div>' +
       '<div class="form-field purpose-field">' +
       '<div class="field-label-row">' +
@@ -1634,11 +1451,6 @@
     }
     toast.classList.add('is-leaving');
     setTimeout(() => toast.remove(), 160);
-  }
-
-  function isEnglishText(value) {
-    const text = String(value || '').trim();
-    return /[a-z]/i.test(text) && !/[㐀-鿿豈-﫿]/.test(text);
   }
 
   function envColor(environment) {

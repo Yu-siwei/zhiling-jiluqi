@@ -25,12 +25,32 @@ test('normalizes a command and keeps important multi-line text', () => {
 
   assert.equal(normalized.id, 'command-1');
   assert.equal(normalized.text, 'git status\n  git log --oneline');
-  assert.equal(normalized.translation, '查看状态');
+  assert.equal('translation' in normalized, false);
   assert.equal(normalized.purpose, '检查仓库');
   assert.equal(normalized.environment, 'Git Bash');
   assert.equal(normalized.favorite, true);
   assert.equal(normalized.createdAt, 100);
   assert.equal(normalized.updatedAt, 200);
+});
+
+test('migrates a legacy translation into the purpose when purpose is empty', () => {
+  const normalized = store.normalizeCommand({
+    text: 'git status',
+    translation: '  查看仓库状态  '
+  });
+
+  assert.equal(normalized.purpose, '查看仓库状态');
+  assert.equal('translation' in normalized, false);
+});
+
+test('prefers an existing purpose over a legacy translation', () => {
+  const normalized = store.normalizeCommand({
+    text: 'git status',
+    translation: '查看仓库状态',
+    purpose: '检查当前仓库'
+  });
+
+  assert.equal(normalized.purpose, '检查当前仓库');
 });
 
 test('drops empty commands and de-duplicates ids', () => {
